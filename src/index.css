@@ -162,7 +162,9 @@
   .login-grid {
     display: grid;
     grid-template-columns: 1.05fr 0.95fr;
-    min-height: max(100vh, 820px);
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
   }
   .login-left {
     position: relative;
@@ -226,6 +228,9 @@
   @media (max-width: 860px) {
     .login-grid {
       grid-template-columns: 1fr;
+      height: auto;
+      min-height: 100dvh;
+      overflow: visible;
     }
     .login-left {
       padding: 32px 24px;
