@@ -1,8 +1,84 @@
-// Tela do catálogo (spec 003, R12). Esqueleto da T12; o conteúdo entra na T13.
+import { useQuery } from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { EquipmentCard } from '../components/EquipmentCard';
+import { getEquipment } from '../lib/api';
+import { filterItems, FILTERS, type StatusFilter } from '../lib/situacao';
+
+// Tela do catálogo (spec 003, R12; layout.md §5.2). A contagem "X de Y" é feita aqui, na tela,
+// com os itens carregados (Q11); busca e filtro também.
 export function CatalogoPage() {
+  const { data, isPending, isError } = useQuery({ queryKey: ['equipment'], queryFn: getEquipment });
+  const [query, setQuery] = useState('');
+  const [status, setStatus] = useState<StatusFilter>('TODOS');
+
+  const items = data?.items ?? [];
+  const visible = useMemo(() => filterItems(items, query, status), [items, query, status]);
+  const available = items.filter((i) => i.status === 'DISPONIVEL').length;
+
   return (
     <main className="mx-auto max-w-[1240px] px-10 pb-16 pt-9">
-      <h1 className="text-[30px] font-semibold tracking-tight">Catálogo</h1>
+      <div className="mb-6 flex items-end justify-between gap-6">
+        <div>
+          <h1 className="m-0 text-[30px] font-semibold tracking-tight">Catálogo</h1>
+          {data && (
+            <p className="mt-2 text-[14px] text-fg/55">
+              {available} de {items.length} equipamentos disponíveis agora
+            </p>
+          )}
+        </div>
+        <input
+          className="input w-[260px]"
+          type="search"
+          placeholder="Buscar por nome ou patrimônio"
+          aria-label="Buscar por nome ou patrimônio"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+      </div>
+
+      {data?.viewer.overdue && (
+        <div className="banner-bad mb-5" role="alert">
+          Você tem um empréstimo em atraso. Devolva o item antes de pedir outro equipamento.{' '}
+          <Link to="/meus-emprestimos" className="underline">
+            Ver meus empréstimos
+          </Link>
+        </div>
+      )}
+
+      <div className="mb-5 flex flex-wrap gap-2" role="group" aria-label="Filtrar por situação">
+        {FILTERS.map((f) => (
+          <button
+            key={f.value}
+            type="button"
+            className="chip"
+            aria-pressed={status === f.value}
+            onClick={() => setStatus(f.value)}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {isPending && <p className="text-fg/55">Carregando…</p>}
+      {isError && <p className="text-danger">Não foi possível carregar o catálogo.</p>}
+      {data && visible.length === 0 && (
+        <p className="py-10 text-center text-fg/55">Nenhum equipamento encontrado.</p>
+      )}
+      {data && visible.length > 0 && (
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(292px,1fr))] gap-4">
+          {visible.map((item) => (
+            <EquipmentCard key={item.id} item={item} viewer={data.viewer} />
+          ))}
+        </div>
+      )}
+
+      <footer className="mt-12 text-center text-[12px] text-fg/40">
+        Fotos:{' '}
+        <a href="https://pixabay.com" target="_blank" rel="noopener noreferrer" className="underline">
+          Pixabay
+        </a>
+      </footer>
     </main>
   );
 }
