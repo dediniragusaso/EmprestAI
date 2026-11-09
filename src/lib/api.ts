@@ -126,7 +126,8 @@ export async function getEquipment(): Promise<Catalog> {
     viewer ??= page.viewer;
     cursor = page.nextCursor;
   } while (cursor);
-  return { items, viewer: viewer! };
+  if (!viewer) throw new Error('Resposta do catalogo sem o bloco viewer.');
+  return { items, viewer };
 }
 
 export function postLoan(equipmentId: string): Promise<CreatedLoan> {
