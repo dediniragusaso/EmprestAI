@@ -1,16 +1,51 @@
-import { useQuery } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { EquipmentCard } from '../components/EquipmentCard';
-import { getEquipment } from '../lib/api';
+import { SolicitarModal } from '../components/SolicitarModal';
+import { Toast } from '../components/Toast';
+import { ApiProblem, getEquipment, postLoan, type EquipmentItem } from '../lib/api';
+import { formatDate } from '../lib/dates';
 import { filterItems, FILTERS, type StatusFilter } from '../lib/situacao';
+
+interface ToastState {
+  message: string;
+  variant: 'ok' | 'error';
+}
 
 // Tela do catálogo (spec 003, R12; layout.md §5.2). A contagem "X de Y" é feita aqui, na tela,
 // com os itens carregados (Q11); busca e filtro também.
 export function CatalogoPage() {
+  const queryClient = useQueryClient();
   const { data, isPending, isError } = useQuery({ queryKey: ['equipment'], queryFn: getEquipment });
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<StatusFilter>('TODOS');
+  const [target, setTarget] = useState<EquipmentItem | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
+  const closeToast = useCallback(() => setToast(null), []);
+
+  const request = useMutation({
+    mutationFn: (item: EquipmentItem) => postLoan(item.id),
+    onSuccess: (loan) => {
+      setTarget(null);
+      setToast({
+        message: `Empréstimo registrado: ${loan.equipmentName}. Devolver até ${formatDate(loan.dueAt)}.`,
+        variant: 'ok',
+      });
+      void queryClient.invalidateQueries({ queryKey: ['equipment'] });
+      void queryClient.invalidateQueries({ queryKey: ['my-loans'] });
+    },
+    onError: (error) => {
+      // Recusa (409) ou falha: mostra o motivo em texto e recarrega o catálogo, porque uma recusa
+      // por corrida significa que a tela estava velha (R12).
+      setTarget(null);
+      setToast({
+        message: error instanceof ApiProblem ? error.detail : 'Não foi possível concluir o pedido.',
+        variant: 'error',
+      });
+      void queryClient.invalidateQueries({ queryKey: ['equipment'] });
+    },
+  });
 
   const items = data?.items ?? [];
   const visible = useMemo(() => filterItems(items, query, status), [items, query, status]);
@@ -68,7 +103,13 @@ export function CatalogoPage() {
       {data && visible.length > 0 && (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(292px,1fr))] gap-4">
           {visible.map((item) => (
-            <EquipmentCard key={item.id} item={item} viewer={data.viewer} />
+            <EquipmentCard
+              key={item.id}
+              item={item}
+              viewer={data.viewer}
+              busy={request.isPending}
+              onRequest={setTarget}
+            />
           ))}
         </div>
       )}
@@ -79,6 +120,17 @@ export function CatalogoPage() {
           Pixabay
         </a>
       </footer>
+
+      {target && data && (
+        <SolicitarModal
+          item={target}
+          proposedDueAt={data.viewer.proposedDueAt}
+          pending={request.isPending}
+          onConfirm={() => request.mutate(target)}
+          onCancel={() => setTarget(null)}
+        />
+      )}
+      {toast && <Toast message={toast.message} variant={toast.variant} onDone={closeToast} />}
     </main>
   );
 }
